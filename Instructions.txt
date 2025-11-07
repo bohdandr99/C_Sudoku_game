@@ -1,0 +1,9 @@
+Compile:
+
+gcc -std=c2x -O2 -Wall -Wextra -o sudoku sudoku.c
+# or: gcc -std=c23 ...
+
+
+Run:
+
+./sudoku
