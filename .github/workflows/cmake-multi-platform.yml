@@ -1,0 +1,126 @@
+name: CMake - Multi-Platform CI
+
+on:
+  push:
+    branches: ["*"]
+  pull_request:
+    branches: ["*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cmake-${{ github.workflow }}-${{ github.ref }}-${{ github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.os }} • ${{ matrix.compiler }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            compiler: gcc
+          - os: ubuntu-latest
+            compiler: clang
+          - os: macos-latest
+            compiler: clang
+          - os: windows-latest
+            compiler: msvc
+
+    env:
+      BUILD_DIR: build
+      CMAKE_BUILD_TYPE: Release
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # --- Set up compilers per platform ---
+      - name: Select compiler (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          if [ "${{ matrix.compiler }}" = "gcc" ]; then
+            echo "CC=gcc"   >> $GITHUB_ENV
+            echo "CXX=g++"  >> $GITHUB_ENV
+          else
+            echo "CC=clang" >> $GITHUB_ENV
+            echo "CXX=clang++" >> $GITHUB_ENV
+          fi
+
+      # (Optional) Install build tools on Ubuntu
+      - name: Install tools (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake
+
+      # (Optional) Ensure CMake on macOS
+      - name: Ensure CMake (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew update
+          brew install cmake || true
+
+      # Windows already has Visual Studio & CMake
+
+      # --- Configure with CMake ---
+      - name: Configure (Windows, MSVC)
+        if: runner.os == 'Windows'
+        run: >
+          cmake -S . -B "${{ env.BUILD_DIR }}"
+          -G "Visual Studio 17 2022"
+          -A x64
+          -DCMAKE_BUILD_TYPE=${{ env.CMAKE_BUILD_TYPE }}
+
+      - name: Configure (*nix)
+        if: runner.os != 'Windows'
+        run: >
+          cmake -S . -B "${{ env.BUILD_DIR }}"
+          -DCMAKE_BUILD_TYPE=${{ env.CMAKE_BUILD_TYPE }}
+          -DCMAKE_C_STANDARD=23
+          -DCMAKE_C_EXTENSIONS=OFF
+
+      # --- Build ---
+      - name: Build
+        run: cmake --build "${{ env.BUILD_DIR }}" --config ${{ env.CMAKE_BUILD_TYPE }} -- -j
+
+      # --- Run tests if you have any (ctest) ---
+      - name: CTest
+        run: ctest --test-dir "${{ env.BUILD_DIR }}" --output-on-failure
+
+      # --- Smoke run of the built binary (non-interactive) ---
+      # Adjust the executable name to match your CMakeLists target if different from "sudoku"
+      - name: Smoke run (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          if [ -x "${{ env.BUILD_DIR }}/sudoku" ]; then
+            echo "quit" | "${{ env.BUILD_DIR }}/sudoku" | head -n 50
+          else
+            echo "Binary not found at ${{ env.BUILD_DIR }}/sudoku (skip smoke run)."
+          fi
+
+      - name: Smoke run (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $exeRelease = Join-Path "${{ env.BUILD_DIR }}" "Release\\sudoku.exe"
+          $exeRoot    = Join-Path "${{ env.BUILD_DIR }}" "sudoku.exe"
+          if (Test-Path $exeRelease) {
+            "quit" | & $exeRelease | Select-Object -First 50
+          } elseif (Test-Path $exeRoot) {
+            "quit" | & $exeRoot | Select-Object -First 50
+          } else {
+            Write-Host "Binary not found (skip smoke run)."
+          }
+
+      # --- (Optional) Upload build artifacts ---
+      - name: Upload artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sudoku-${{ matrix.os }}-${{ matrix.compiler }}
+          path: |
+            ${{ env.BUILD_DIR }}/**/*
