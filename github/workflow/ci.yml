@@ -1,0 +1,25 @@
+name: C Build & Test
+
+on:
+  push:
+    branches: [ "*" ]
+  pull_request:
+    branches: [ "*" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Source
+      uses: actions/checkout@v4
+
+    - name: Install Build Tools
+      run: sudo apt-get update && sudo apt-get install -y build-essential
+
+    - name: Compile Sudoku
+      run: gcc -std=c2x -O2 -Wall -Wextra -o sudoku sudoku.c
+
+    - name: Run Basic Test (non-interactive)
+      run: |
+        echo "quit" | ./sudoku | grep -i "Sudoku"
