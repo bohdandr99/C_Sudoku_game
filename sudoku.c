@@ -1,6 +1,7 @@
 // sudoku.c - single-file, single-thread terminal Sudoku game
 // Build: gcc -std=c2x -O2 -Wall -Wextra -o sudoku sudoku.c
 // (Use -std=c23 if your GCC prefers the finalized name.)
+// Copyright 2025. Bogdan Drozdov. All rights reserved.
 
 #include <stdio.h>
 #include <stdlib.h>
